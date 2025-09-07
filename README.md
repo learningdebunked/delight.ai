@@ -1,6 +1,8 @@
-# 🌐 Service Excellence Dynamical System (SEDS) Framework
+# 🌐 Delight.AI - Service Excellence Dynamical System (SEDS)
 
-A comprehensive framework for building cross-cultural, emotionally-intelligent service systems. The SEDS Framework enables the creation of AI systems that can understand and adapt to cultural differences, recognize and respond to emotions, and continuously improve through feedback.
+**SEDS** (Service Excellence Dynamical System) is the core AI framework powering **Delight.AI**, enabling next-generation, emotionally-intelligent customer experiences. This comprehensive framework helps build cross-cultural, emotionally-aware service systems that understand and adapt to cultural differences, recognize and respond to emotions, and continuously improve through feedback.
+
+> **Part of the Delight.AI Platform** - SEDS is the intelligent engine that powers Delight.AI's ability to create meaningful, culturally-aware customer interactions at scale.
 
 ## ✨ Key Innovations
 
@@ -48,7 +50,7 @@ A comprehensive framework for building cross-cultural, emotionally-intelligent s
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd seds_framework
+cd delight.ai
 ```
 
 2. Create and activate a virtual environment:
@@ -85,7 +87,7 @@ Access the dashboard at `http://127.0.0.1:8050/`
 ## 📊 Project Structure
 
 ```
-seds_framework/
+delight.ai/
 ├── app/                    # Web application
 │   ├── main.py            # Dashboard application
 │   ├── components/        # Reusable UI components
@@ -263,10 +265,34 @@ adaptation:
 
 ## 🌍 Real-world Applications
 
+### Retail & E-commerce: Handling Frustrated Pickup Customers
+
+Delight.AI's SEDS excels in managing customer experiences during in-store and curbside pickups, particularly when customers face delays or service issues:
+
+#### 1. **Pre-Pickup Communication**
+- **Cultural Adaptation**: Tailors confirmation messages based on cultural preferences
+- **Proactive Updates**: Automatically notifies customers about delays with culturally appropriate messaging
+- **Emotion Detection**: Analyzes customer responses for early signs of frustration
+
+#### 2. **During Wait Time**
+- **Real-time Monitoring**: Tracks order preparation and updates customers accordingly
+- **Emotion-Aware Responses**: Adjusts communication style based on detected frustration levels
+- **Personalized Updates**: Provides culturally appropriate time estimates and apologies
+
+#### 3. **At Pickup**
+- **Staff Guidance**: Alerts staff about customer's emotional state and preferences
+- **Cultural Protocols**: Suggests appropriate greetings and communication styles
+- **Service Recovery**: Recommends appropriate compensation based on cultural context
+
+#### 4. **Post-Pickup Follow-up**
+- **Sentiment Analysis**: Evaluates customer satisfaction from feedback
+- **Cultural Response**: Crafts follow-up messages that resonate with the customer's cultural background
+- **Continuous Improvement**: Learns from each interaction to enhance future service
+
+### Other Applications
 - **Customer Service**: Adapt responses based on cultural context
 - **Education**: Personalized learning experiences
 - **Healthcare**: Culturally sensitive patient interactions
-- **E-commerce**: Localized product recommendations
 - **HR & Recruitment**: Bias-free candidate evaluation
 
 ## 📝 License
@@ -304,5 +330,5 @@ For questions, feedback, or support:
 ---
 
 <div align="center">
-  Made with ❤️ by the SEDS Framework Team
+  Made with ❤️ by the Delight.AI Team
 </div>
