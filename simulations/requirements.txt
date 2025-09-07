@@ -1,0 +1,4 @@
+# Simulation Dependencies
+numpy>=1.21.0
+pydantic>=1.8.0
+python-dateutil>=2.8.2
