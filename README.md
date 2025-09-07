@@ -299,6 +299,36 @@ Delight.AI's SEDS excels in managing customer experiences during in-store and cu
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## 🔬 Formal Proofs & Verification
+
+Delight.AI's SEDS framework is built on rigorous mathematical foundations. We provide formal proofs and verification for key properties:
+
+### Core Theorems
+
+1. **Convergence** ([proof](proofs/notebooks/theorem1_convergence.ipynb))
+   - Proves that the cultural adaptation process converges to a stable profile
+   - Includes interactive visualizations of convergence behavior
+
+2. **Invariance** ([proof](proofs/notebooks/theorem2_invariance.ipynb))
+   - Demonstrates preservation of cultural invariants during adaptation
+   - Shows how essential properties are maintained
+
+3. **Fusion Optimality** ([proof](proofs/notebooks/theorem3_fusion_optimality.ipynb))
+   - Proves that the cultural fusion process achieves optimal blending
+   - Includes numerical verification of optimality conditions
+
+### Running Tests
+
+To verify the mathematical properties:
+
+```bash
+# Install test dependencies
+pip install numpy scipy matplotlib pytest
+
+# Run the test suite
+pytest proofs/tests/
+```
+
 ## 📚 References & Research
 
 1. Hofstede, G. (2011). Dimensionalizing Cultures: The Hofstede Model in Context
