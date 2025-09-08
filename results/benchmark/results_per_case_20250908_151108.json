@@ -1,0 +1,12 @@
+[
+  {
+    "test_case": "test_1",
+    "metrics": {
+      "accuracy_score": 1.0,
+      "response_time": 0.10176801681518555,
+      "cultural_appropriateness": 0.9,
+      "emotion_similarity": 1.0,
+      "semantic_similarity": 0.85
+    }
+  }
+]
