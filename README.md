@@ -1,16 +1,17 @@
 # 🌐 Delight.AI - Service Excellence Dynamical System (SEDS)
 
-**SEDS** (Service Excellence Dynamical System) is the core AI framework powering **Delight.AI**, enabling next-generation, emotionally-intelligent customer experiences. This comprehensive framework helps build cross-cultural, emotionally-aware service systems that understand and adapt to cultural differences, recognize and respond to emotions, and continuously improve through feedback.
+**SEDS** (Service Excellence Dynamical System) is an advanced AI framework that powers **Delight.AI**, delivering next-generation, emotionally-intelligent customer experiences. This comprehensive system enables the creation of cross-cultural, emotionally-aware service systems that understand and adapt to cultural differences, recognize and respond to emotions in real-time, and continuously improve through feedback and machine learning.
 
-> **Part of the Delight.AI Platform** - SEDS is the intelligent engine that powers Delight.AI's ability to create meaningful, culturally-aware customer interactions at scale.
+> **Enterprise-Grade AI for Customer Experience** - SEDS combines cutting-edge machine learning with deep cultural intelligence to transform customer interactions across all digital touchpoints.
 
 ## ✨ Key Innovations
 
-- **Cultural Intelligence**: Advanced cultural adaptation using 20+ cultural dimensions
-- **Emotional Awareness**: Real-time emotion detection and state tracking
-- **Adaptive Learning**: Models that improve with each interaction
-- **Modular Design**: Easily extensible architecture for custom implementations
-- **Comprehensive Tooling**: From data generation to visualization
+- **Multi-modal Intelligence**: Process and fuse text, audio, and visual inputs for comprehensive understanding
+- **Cultural Adaptation**: Advanced modeling across 25+ cultural dimensions for global deployment
+- **Real-time Emotion Analysis**: State-of-the-art emotion detection and response adaptation
+- **Theoretical Foundations**: Built on three core theorems ensuring optimal service delivery
+- **High Performance**: Optimized for both training and inference with GPU acceleration
+- **Enterprise Ready**: Production-grade monitoring, logging, and scalability
 
 ## 🌟 Features
 
@@ -54,85 +55,106 @@
 - Python 3.9+
 - pip package manager
 - CUDA 11.7+ (for GPU acceleration, recommended)
+- FFmpeg (for audio processing)
 
 ### Installation
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/learningdebunked/delight.ai.git
 cd delight.ai
 ```
 
-2. Create and activate a virtual environment:
+2. Set up the environment (automatically creates virtualenv and installs dependencies):
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+python setup.py
 ```
 
-3. Install dependencies:
+3. Activate the virtual environment:
 ```bash
-pip install -r requirements.txt
+source .venv/bin/activate  # On Windows: \.venv\Scripts\activate
 ```
 
-### Usage
+### Basic Usage
 
-1. **Generate Synthetic Data**
+1. **Run the Example Script**
 ```bash
-python -m utils.data_generator
+python example_usage.py
 ```
-This will create sample interaction data in `data/raw/`.
+This demonstrates:
+- Multi-modal processing (text, audio, images)
+- Performance tracking
+- Theorem validation
+- Benchmarking
 
-2. **Train the Models**
+2. **API Usage**
+```python
+from models.seds_core import SEDSCore
+from models.multimodal_processor import MultiModalProcessor
+
+# Initialize the processor
+processor = MultiModalProcessor(device="cuda" if torch.cuda.is_available() else "cpu")
+
+# Process multi-modal input
+features, fused = processor(
+    text="Hello, how can I help you today?",
+    audio_path="data/audio/example.wav",
+    image_path="data/images/example.jpg"
+)
+
+# Use the SEDS core system
+seds = SEDSCore()
+response = seds.process_input(
+    text_input="I'm not happy with my purchase",
+    cultural_context={"country": "JP", "language": "ja"},
+    emotion_context={"valence": -0.7, "arousal": 0.5}
+)
+```
+
+3. **Run Tests**
 ```bash
-python -m models.train
+python -m pytest tests/
 ```
-Trained models will be saved in the `models/` directory.
 
-3. **Launch the Dashboard**
-```bash
-python -m app.main
-```
-Access the dashboard at `http://127.0.0.1:8050/`
-
-## 📊 Project Structure
+## 🏗️ Project Structure
 
 ```
 delight.ai/
-├── app/                    # Web application
-│   ├── main.py            # Dashboard application
-│   ├── components/        # Reusable UI components
-│   ├── layouts/           # Page layouts
-│   ├── callbacks/         # Dashboard interactivity
-│   └── static/            # Static assets (CSS, JS, images)
+├── app/                  # Web application components
+│   └── main.py           # Main FastAPI application
 │
-├── models/                # Core models
-│   ├── __init__.py        # Package initialization
+├── benchmark/            # Benchmarking framework
+│   └── service_excellence_bench.py
+│
+├── data/                 # Data storage
+│   ├── audio/            # Audio samples
+│   └── images/           # Image assets
+│
+├── models/               # Core AI models
+│   ├── __init__.py
 │   ├── cultural_model.py  # Cultural adaptation logic
 │   ├── emotion_model.py   # Emotion detection and analysis
-│   ├── seds_core.py       # Main framework integration
-│   └── train.py           # Model training scripts
+│   ├── multimodal_processor.py  # Multi-modal processing
+│   ├── optimization.py    # Performance optimization
+│   ├── performance_tracker.py  # Metrics tracking
+│   ├── seds_core.py      # Main framework integration
+│   └── theorems.py       # Core theorems implementation
 │
-├── utils/                 # Utility modules
-│   ├── __init__.py
-│   ├── data_generator.py  # Synthetic data generation
-│   ├── preprocessors.py   # Data cleaning and transformation
-│   └── validators.py      # Data validation utilities
+├── results/              # Output files and logs
+│   └── benchmark/        # Benchmark results
 │
-├── data/                  # Data storage
-│   ├── raw/              # Raw interaction data
-│   ├── processed/        # Cleaned and transformed data
-│   └── models/           # Trained model artifacts
-│
-├── tests/                 # Test suite
+├── tests/                # Test suite
 │   ├── unit/             # Unit tests
 │   └── integration/      # Integration tests
 │
-├── docs/                  # Documentation
-├── examples/              # Example implementations
-├── .gitignore            # Git ignore file
-├── requirements.txt       # Python dependencies
-├── setup.py              # Package installation
-└── README.md             # This file
+├── utils/                # Utility functions
+│   └── data_generator.py # Test data generation
+│
+├── .gitignore
+├── example_usage.py      # Example script
+├── README.md             # This file
+├── requirements.txt      # Python dependencies
+└── setup.py              # Package installation
 ```
 
 ## 🧠 Core Components
@@ -156,11 +178,44 @@ delight.ai/
 - **Feedback Integration**: Learn from user feedback
 - **Performance Monitoring**: Track system metrics and effectiveness
 
-### Data Generator (`utils/data_generator.py`)
-- **Synthetic Interactions**: Create realistic service scenarios
-- **Cultural Variation**: Generate diverse cultural profiles
-- **Emotional Context**: Include emotional states in interactions
-- **Customizable Outputs**: Control data format and content
+## 🏗️ Technical Architecture
+
+### 1. Multi-modal Fusion (`models/multimodal_processor.py`)
+- **Cross-modal Attention**: Uses attention mechanisms to weight and combine features from different modalities (text, audio, visual)
+- **Feature Concatenation**: Combines different data types into unified representations
+- **Dimensionality Reduction**: Reduces feature dimensions while preserving important patterns
+
+### 2. Cultural Adaptation (`models/cultural_model.py`)
+- **Cultural Dimensions**: Implements Hofstede's framework with custom extensions
+- **Adaptation Rules**: Context-aware transformation rules for different cultural contexts
+- **Distance Metrics**: Calculates cultural similarity using mathematical formulas
+
+### 3. Emotion Analysis (`models/emotion_model.py`)
+- **Transformer Networks**: Advanced deep learning for text understanding
+- **Audio Processing**: MFCC feature extraction for speech analysis
+- **Visual Recognition**: CNN-based facial expression analysis
+
+### 4. Performance Optimization (`models/optimization.py`)
+- **Mixed Precision Training**: Balances speed and accuracy with 16/32-bit computations
+- **Gradient Management**: Efficient learning through gradient accumulation
+- **Memory Optimization**: Reduces memory footprint during training
+
+### 5. Theoretical Foundations (`models/theorems.py`)
+- **Convergence**: Ensures stable learning dynamics
+- **Invariance**: Maintains core properties during adaptation
+- **Fusion Optimality**: Mathematically guarantees effective modality combination
+
+### 6. Performance Tracking (`models/performance_tracker.py`)
+- **Moving Averages**: Tracks metrics over time
+- **Anomaly Detection**: Identifies performance issues
+- **Metric Aggregation**: Combines results across evaluations
+
+### 7. Data Processing (`utils/data_generator.py`)
+- **Synthetic Data Generation**: Creates realistic training examples and service scenarios
+- **Data Augmentation**: Increases dataset diversity through transformations
+- **Cultural Variation**: Generates diverse cultural profiles for testing
+- **Emotional Context**: Includes emotional states in synthetic interactions
+- **Feature Engineering**: Prepares and transforms data for model input
 
 ## 📈 Dashboard Features
 
