@@ -483,31 +483,84 @@ class SEDSCore:
     
     def _extract_emotion_features(self, text: str, context: Dict[str, Any]) -> np.ndarray:
         """
-        Extract features for emotion prediction from text and context.
+        Extract emotion features using transformer-based emotion recognition combined with
+        contextual and linguistic features.
+        
+        Implements a multi-modal feature extraction pipeline that combines:
+        1. Transformer-based emotion embeddings
+        2. Sentiment and emotion probabilities
+        3. Linguistic features
+        4. Cultural context features
         
         Args:
-            text: Input text
-            context: User context
+            text: Input text to analyze
+            context: User context including cultural profile
             
         Returns:
-            Feature vector for emotion prediction
+            Combined feature vector for emotion prediction
         """
-        # Basic text features (in a real system, use more sophisticated features)
-        text_length = len(text)
-        word_count = len(text.split())
-        has_question = 1 if '?' in text else 0
-        has_exclamation = 1 if '!' in text else 0
-        
-        # Combine with cultural context if available
-        cultural_features = context.get('cultural_profile', np.zeros(self.cultural_model.dimensions))
-        
-        # Combine all features
-        features = np.concatenate([
-            [text_length, word_count, has_question, has_exclamation],
-            cultural_features
-        ])
-        
-        return features
+        try:
+            # Get transformer-based emotion embeddings and probabilities
+            emotion_result = self.emotion_model.detect_emotion(
+                text=text,
+                context=context
+            )
+            
+            # Extract emotion probabilities and features
+            emotion_probs = emotion_result.get('emotion_probabilities', {})
+            emotion_embedding = emotion_result.get('embedding', np.zeros(768))  # Default BERT dimension
+            
+            # Normalize and process emotion scores
+            emotion_scores = np.array([
+                emotion_probs.get('joy', 0),
+                emotion_probs.get('sadness', 0),
+                emotion_probs.get('anger', 0),
+                emotion_probs.get('fear', 0),
+                emotion_probs.get('surprise', 0),
+                emotion_probs.get('disgust', 0),
+                emotion_probs.get('neutral', 0)
+            ])
+            
+            # Add valence-arousal-dominance (VAD) scores if available
+            vad_scores = emotion_result.get('vad_scores', [0.5, 0.5, 0.5])
+            
+            # Get cultural context features
+            cultural_features = context.get('cultural_profile', np.zeros(self.cultural_model.dimensions))
+            
+            # Extract linguistic features (complementary to transformer features)
+            tokens = text.split()
+            text_length = len(text)
+            word_count = len(tokens)
+            avg_word_length = np.mean([len(w) for w in tokens]) if tokens else 0
+            has_question = 1 if '?' in text else 0
+            has_exclamation = 1 if '!' in text else 0
+            
+            # Combine all features
+            features = np.concatenate([
+                emotion_embedding,           # Transformer embeddings (768d)
+                emotion_scores,              # Emotion probabilities (7d)
+                vad_scores,                  # VAD scores (3d)
+                cultural_features,           # Cultural features (n_dims)
+                [                           # Additional linguistic features (5d)
+                    text_length,
+                    word_count,
+                    avg_word_length,
+                    has_question,
+                    has_exclamation
+                ]
+            ])
+            
+            return features
+            
+        except Exception as e:
+            # Fallback to basic features if emotion model fails
+            logging.warning(f"Emotion feature extraction failed: {str(e)}")
+            cultural_features = context.get('cultural_profile', np.zeros(self.cultural_model.dimensions))
+            return np.concatenate([
+                np.zeros(768 + 7 + 3),  # Zero vectors for missing transformer features
+                cultural_features,
+                [len(text), len(text.split()), 0, 0, 0]  # Basic text features
+            ])
         
     def _add_ensemble_diversity(self):
         """Add diversity to the ensemble by replacing underperforming members."""
