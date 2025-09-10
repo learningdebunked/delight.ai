@@ -18,15 +18,17 @@
 ### Core Innovations
 - **Stochastic Ensemble Dynamics**: Advanced ensemble modeling for robust predictions
 - **Multi-modal Fusion**: Seamless integration of text, audio, and visual inputs
-- **Performance Optimization**: Optimized for both training and inference
+- **Performance Optimization**: Optimized for both training and inference with GPU acceleration
 - **Theoretical Foundations**: Implementation of three core theorems for service excellence
+- **Cultural Intelligence Engine**: Advanced cultural adaptation with real-time learning
 
-### Cultural Adaptation
-- **25+ Cultural Dimensions**: Enhanced Hofstede's model with additional dimensions
-- **Dynamic Profiling**: Real-time cultural profile updates
-- **Rule-based Adaptation**: Context-aware response modification
-- **Cultural Distance Metrics**: Advanced metrics for cultural difference quantification
-- **Region-Specific Customization**: Granular control over regional adaptations
+### Enhanced Cultural Adaptation
+- **Multi-dimensional Cultural Modeling**: 25+ cultural dimensions including Hofstede's, Hall's, and Schwartz's models
+- **Dynamic Adaptation Strategies**: Context-aware adaptation with multiple strategies (assimilation, integration, separation, marginalization, hybridization)
+- **Expert Validation System**: Framework for domain experts to validate and refine cultural profiles
+- **Cultural Distance Metrics**: Advanced metrics for precise cultural difference quantification
+- **Adaptive Learning**: Continuous improvement from feedback and interactions
+- **Formal Theorems**: Mathematically-proven convergence and stability of adaptation processes
 
 ### Emotion Intelligence
 - **Advanced Multimodal Analysis**: State-of-the-art text, audio, and visual emotion detection
@@ -116,19 +118,42 @@ source .venv/bin/activate  # On Windows: \.venv\Scripts\activate
 ### Quick Example
 ```python
 from models.seds_core import SEDSCore
+from models.enhanced_cultural_model import CulturalProfile, CulturalDimension
 
-# Initialize with default settings
-seds = SEDSCore(device="cuda" if torch.cuda.is_available() else "cpu")
-
-# Process an interaction
-response = seds.process_interaction(
-    text="I'm not satisfied with my recent order",
-    cultural_context={"country": "JP", "language": "ja"},
-    emotion_context={"valence": -0.8, "arousal": 0.6}
+# Initialize with enhanced cultural adaptation
+seds = SEDSCore(
+    cultural_dimensions=len(CulturalDimension),  # Use all available dimensions
+    emotion_dimensions=10,
+    ensemble_size=5
 )
 
-print(f"Adapted Response: {response['text']}")
-print(f"Confidence: {response['confidence']:.2f}")
+# Create a custom cultural profile
+custom_profile = CulturalProfile(
+    profile_id="custom_us",
+    name="US English (Custom)",
+    dimensions={
+        CulturalDimension.INDIVIDUALISM: 0.9,
+        CulturalDimension.POWER_DISTANCE: 0.3,
+        CulturalDimension.UNCERTAINTY_AVOIDANCE: 0.4,
+        # ... set other dimensions
+    }
+)
+
+# Add the custom profile
+seds.cultural_engine.add_profile(custom_profile)
+
+# Process an interaction with cultural adaptation
+response, metadata = seds.generate_response(
+    user_input="I need help with my recent order",
+    user_context={
+        'cultural_profile_id': 'custom_us',
+        'domain': 'customer_service',
+        'urgency': 0.7
+    }
+)
+
+print(f"Adapted Response: {response}")
+print(f"Adaptation Metadata: {metadata}")
 ```
 
 ### Example Output
@@ -152,25 +177,60 @@ Performance Metrics:
 
 ## ⚙️ Configuration
 
-### Environment Variables
-```bash
-# Core Settings
-export SEDS_MODEL_DIR=./models
-export SEDS_DEVICE=cuda  # or 'cpu'
-export SEDS_LOG_LEVEL=INFO  # DEBUG, INFO, WARNING, ERROR
+### Cultural Adaptation Settings
+```yaml
+# config/cultural_adaptation.yaml
 
-# Performance Tuning
-export SEDS_MAX_WORKERS=4
-export SEDS_BATCH_SIZE=32
-export SEDS_USE_FP16=True  # Enable mixed precision
+# Base cultural profiles
+profiles:
+  - id: global
+    name: Global Default
+    description: Default cultural profile with moderate values
+    dimensions:
+      individualism: 0.5
+      power_distance: 0.5
+      uncertainty_avoidance: 0.5
+      masculinity: 0.5
+      long_term_orientation: 0.5
+      indulgence: 0.5
+      context: 0.5
+      time: 0.5
+      space: 0.5
+      embeddedness: 0.5
+      hierarchy: 0.5
+      mastery: 0.5
+      affective_autonomy: 0.5
+      intellectual_autonomy: 0.5
+      egalitarianism: 0.5
+      harmony: 0.5
 
-# Cultural Adaptation
-export SEDS_DEFAULT_CULTURE=en-US
-export SEDS_ADAPTATION_STRATEGY=contextual  # Options: minimal, moderate, strong, contextual
+# Adaptation strategies
+adaptation:
+  # Base adaptation strength (0.0 to 1.0)
+  base_strength: 0.7
+  
+  # Enable/disable adaptation features
+  enable_formality_adaptation: true
+  enable_directness_adaptation: true
+  enable_learning: true
+  
+  # Learning parameters
+  learning_rate: 0.01
+  min_confidence: 0.6
+  
+  # Expert validation settings
+  expert_validation:
+    enabled: true
+    min_confidence: 0.5
+    notification_threshold: 0.3
 
-# Emotion Detection
-export SEDS_EMOTION_THRESHOLD=0.7
-export SEDS_SENTIMENT_WEIGHTS='{"positive": 1.0, "negative": -1.0, "neutral": 0.0}'
+# Performance settings
+performance:
+  use_gpu: true
+  max_batch_size: 32
+  enable_mixed_precision: true
+  enable_gradient_checkpointing: true
+  enable_8bit_quantization: true
 ```
 
 ### Configuration File (`config/settings.yaml`)
@@ -444,6 +504,35 @@ for result in batch_results:
     print(f"Emotion: {result['emotion']} ({result['confidence']:.2f})")
     print(f"Cultural Adaptation: {result['cultural_adaptation']}")
 ```
+
+## 🎯 Cultural Adaptation Features
+
+### Core Capabilities
+- **Multi-dimensional Cultural Modeling**:
+  - 25+ cultural dimensions from leading frameworks
+  - Dynamic cultural profile management
+  - Real-time cultural distance calculations
+
+### Adaptation Strategies
+- **Context-Aware Adaptation**:
+  - Formality adjustment
+  - Directness adaptation
+  - Politeness level tuning
+  - Cultural reference adaptation
+
+### Expert Integration
+- **Validation Workflow**:
+  - Expert review queue
+  - Annotation tools
+  - Feedback integration
+  - Profile versioning
+
+### Performance Metrics
+- **Adaptation Tracking**:
+  - Success/failure rates
+  - Dimension effectiveness
+  - Response time impact
+  - User satisfaction correlation
 
 ## 📊 Performance Benchmarks
 

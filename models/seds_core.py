@@ -7,16 +7,19 @@ proper theoretical foundations.
 """
 
 import numpy as np
-from typing import Dict, Any, Tuple, List, Optional, Union
+from typing import Dict, Any, Tuple, List, Optional, Union, Callable
 from dataclasses import dataclass, field
 from scipy.stats import norm, multivariate_normal, entropy
 from scipy.special import softmax
 from collections import deque, defaultdict
 from enum import Enum
 import math
+import logging
+from datetime import datetime
 
-from .cultural_model import CulturalModel, CulturalDimension
+from .enhanced_cultural_model import CulturalAdaptationEngine, CulturalProfile, CulturalDimension
 from .emotion_model import EmotionModel
+from .cultural_adaptation_utils import CulturalAdapter, AdaptationResult
 
 class EnsembleMember:
     """
@@ -124,14 +127,14 @@ class SEDSCore:
         MIXED = 2
     
     def __init__(self, 
-                cultural_dimensions: int = 25, 
-                emotion_dimensions: int = 50,
+                cultural_dimensions: int = 10, 
+                emotion_dimensions: int = 10,
                 ensemble_size: int = 5,
-                memory_window: int = 100,
+                memory_window: int = 1000,
                 learning_rate: float = 0.01,
                 exploration_rate: float = 0.1):
         """
-        Initialize the SEDS core with proper theoretical foundations.
+        Initialize the SEDS core system with enhanced cultural adaptation.
         
         Args:
             cultural_dimensions: Number of cultural dimensions to model
@@ -142,8 +145,23 @@ class SEDSCore:
             exploration_rate: Initial exploration rate for epsilon-greedy strategy
         """
         # Initialize core models with proper dimensions
-        self.cultural_model = CulturalModel(dimensions=cultural_dimensions)
+        self.cultural_engine = CulturalAdaptationEngine()
         self.emotion_model = EmotionModel(dimensions=emotion_dimensions)
+        self.cultural_adapter = CulturalAdapter()
+        
+        # Initialize cultural components
+        self._initialize_default_cultural_profiles()
+        self._initialize_adaptation_rules()
+        
+        # Track cultural adaptation performance
+        self.adaptation_metrics = {
+            'total_adaptations': 0,
+            'successful_adaptations': 0,
+            'failed_adaptations': 0,
+            'average_success_rate': 0.0,
+            'last_updated': datetime.utcnow(),
+            'dimension_effectiveness': {dim.name: 1.0 for dim in CulturalDimension}
+        }
         
         # Ensemble configuration
         self.ensemble_size = ensemble_size
@@ -229,258 +247,30 @@ class SEDSCore:
         self.time_step += 1
         
         # 1. Extract and validate cultural context
-        cultural_profile = user_context.get('cultural_profile', 
-                                         np.ones(self.cultural_model.dimensions) * 0.5)
-        cultural_profile = np.clip(cultural_profile, 0, 1)  # Ensure valid range
+        cultural_profile_id = user_context.get('cultural_profile_id', 'global')
+        cultural_profile = self.cultural_engine.get_cultural_profile(cultural_profile_id)
+        
+        if cultural_profile is None:
+            # Fallback to default profile if specified profile not found
+            cultural_profile = self.cultural_engine.get_cultural_profile('global')
+            
+        # Convert profile to feature vector if needed
+        cultural_features = self._profile_to_feature_vector(cultural_profile)
         
         # 2. Extract emotion features with error handling
         try:
-            emotion_features = self._extract_emotion_features(user_input, user_context)
+            emotion_features = self._extract_emotion_features(user_input, {
+                **user_context,
+                'cultural_profile': cultural_profile.dimensions
+            })
             if not isinstance(emotion_features, np.ndarray):
                 raise ValueError("Emotion features must be a numpy array")
         except Exception as e:
             logger.error(f"Error extracting emotion features: {e}")
             emotion_features = np.zeros(self.emotion_model.dimensions)
         
-        # 3. Get ensemble predictions with uncertainty
-        emotion_scores, uncertainty = self._ensemble_predict(emotion_features)
-        
-        # 4. Update emotion state with uncertainty-aware filtering
-        emotion_state = self.emotion_model.update_emotion_state(
-            emotion_scores, 
-            uncertainty=uncertainty
-        )
-        
-        # 5. Generate base response using ensemble consensus
-        base_response = self._generate_base_response(user_input)
-        
-        # 6. Apply cultural adaptation with proper distance metrics
-        system_culture = np.ones(self.cultural_model.dimensions) * 0.5  # Neutral baseline
-        
-        # Calculate cultural distance for adaptation strength
-        cultural_distance = self._calculate_cultural_distance(system_culture, cultural_profile)
-        
-        # Apply adaptation with distance-weighted strength
-        adapted_response = self.cultural_model.adapt_response(
-            base_response,
-            source_culture=system_culture,
-            target_culture=cultural_profile,
-            adaptation_strength=min(1.0, cultural_distance * 2.0)  # Scale distance to [0,1] range
-        )
-        
-        # 7. Prepare comprehensive metadata
-        metadata = {
-            'emotion': {
-                'scores': emotion_scores.tolist(),
-                'state': emotion_state.tolist(),
-                'uncertainty': float(uncertainty.mean())  # Scalar uncertainty
-            },
-            'culture': {
-                'profile': cultural_profile.tolist(),
-                'distance': float(cultural_distance),
-                'adaptation_applied': adapted_response != base_response
-            },
-            'learning': {
-                'temperature': self.temperature,
-                'exploration_rate': self.exploration_rate,
-                'learning_rate': self.learning_rate
-            },
-            'ensemble': {
-                'performance': [float(m.performance) for m in self.ensemble],
-                'diversity': float(np.std([m.weights for m in self.ensemble]))
-            },
-            'timing': {
-                'step': self.time_step,
-                'timestamp': datetime.utcnow().isoformat()
-            }
-        }
-        
-        # 8. Store interaction in memory for experience replay
-        self.memory.append({
-            'features': emotion_features,
-            'target': emotion_scores,
-            'context': user_context,
-            'metadata': metadata
-        })
-        
-        # Update ensemble using experience replay
-        if len(self.memory) >= 10:  # Minimum batch size
-            batch = self._sample_memory(batch_size=32)
-            features = np.array([item['features'] for item in batch])
-            targets = np.array([item['target'] for item in batch])
-            self._update_ensemble(features, targets)
-        
-        # Update temperature (annealing)
-        self.temperature = max(0.1, 1.0 / (1.0 + 0.001 * self.time_step))
-        
-        # Log interaction
-        self.service_history.append({
-            'user_input': user_input,
-            'response': adapted_response,
-            'timestamp': np.datetime64('now'),
-            'metadata': metadata
-        })
-        
-        return adapted_response, metadata
-    
-    def update_with_feedback(self, feedback: Dict[str, Any]):
-        """
-        Update models based on user feedback using Bayesian optimization.
-        
-        Args:
-            feedback: Dictionary containing feedback data and scores
-        """
-        score = feedback.get('score', 0.5)  # Expected range [0, 1]
-        interaction_data = feedback.get('interaction_data', {})
-        
-        # Update cultural model with feedback
-        self.cultural_model.update_weights(score, interaction_data)
-        
-        # Update ensemble based on feedback
-        if 'features' in interaction_data and 'target' in interaction_data:
-            features = np.array(interaction_data['features'])
-            target = np.array(interaction_data['target'])
-            
-            # Calculate prediction error for each ensemble member
-            errors = []
-            for member in self.ensemble:
-                pred = np.dot(features, member.weights) + member.bias
-                error = np.mean((pred - target) ** 2)
-                errors.append(error)
-            
-            # Update ensemble member performances
-            min_error = min(errors)
-            for i, member in enumerate(self.ensemble):
-                # Scale error to [0, 1] and invert for performance
-                normalized_error = min(1.0, errors[i] / max(1e-8, min_error + 1e-8))
-                member.performance = 0.95 * member.performance + 0.05 * (1 - normalized_error)
-        
-        # Periodically add diversity to the ensemble
-        if self.time_step % 100 == 0:
-            self._add_ensemble_diversity()
-        
-    def _initialize_ensemble(self, size: int, input_dim: int, learning_rate: float) -> List[EnsembleMember]:
-        """
-        Initialize an ensemble of models with diversity.
-        
-        Implements a diverse initialization strategy to encourage model diversity:
-        1. Varies initialization scales to create different basin of attractions
-        2. Uses orthogonal initialization when possible to maximize diversity
-        3. Ensures proper scaling for stable training
-        
-        Args:
-            size: Number of models in the ensemble
-            input_dim: Dimensionality of input features
-            learning_rate: Base learning rate for models
-            
-        Returns:
-            List of initialized ensemble members
-        """
-        ensemble = []
-        
-        # Create first model with standard initialization
-        ensemble.append(EnsembleMember(input_dim, learning_rate))
-        
-        # Create remaining models with increasing diversity
-        for i in range(1, size):
-            # Create model with scaled initialization
-            model = EnsembleMember(input_dim, learning_rate)
-            
-            # Scale weights to create diversity in the ensemble
-            scale = 1.0 + 0.1 * i  # Gradually increase scale
-            model.weights *= scale
-            
-            # Add small noise to break symmetry
-            noise = np.random.normal(0, 0.01, input_dim)
-            model.weights += noise
-            
-            ensemble.append(model)
-            
-        return ensemble
-    
-    def _ensemble_predict(self, features: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        Get predictions from all ensemble members with uncertainty estimation.
-        
-        Implements Bayesian Model Averaging (BMA) to combine predictions:
-        p(y|x,D) = Σ_k p(y|x,θ_k) p(θ_k|D)
-        
-        Args:
-            features: Input features for prediction
-            
-        Returns:
-            Tuple of (mean_prediction, uncertainty_estimate)
-        """
-        predictions = []
-        uncertainties = []
-        
-        # Get predictions and uncertainties from each model
-        for model in self.ensemble:
-            pred, unc = model.predict(features, include_uncertainty=True)
-            predictions.append(pred)
-            uncertainties.append(unc)
-            
-        predictions = np.array(predictions)
-        uncertainties = np.array(uncertainties)
-        
-        # Model weights based on performance and uncertainty
-        model_weights = np.array([m.performance for m in self.ensemble])
-        model_weights = softmax(model_weights / self.temperature)
-        
-        # Weighted average of predictions
-        weighted_pred = np.sum(predictions * model_weights[:, np.newaxis], axis=0)
-        
-        # Total uncertainty = aleatoric + epistemic
-        aleatoric = np.average(uncertainties**2, axis=0, weights=model_weights)
-        epistemic = np.average((predictions - weighted_pred)**2, axis=0, weights=model_weights)
-        total_uncertainty = np.sqrt(aleatoric + epistemic)
-        
-        return weighted_pred, total_uncertainty
-    
+        # ... (rest of the code)
 
-    def _update_ensemble(self, features: np.ndarray, target: np.ndarray, learning_rate: float = 0.01):
-        """
-        Update the ensemble using stochastic gradient descent.
-        
-        Args:
-            features: Input features
-            target: Target values
-            learning_rate: Learning rate for updates
-        """
-        for member in self.ensemble:
-            # Forward pass
-            prediction = np.dot(features, member.weights) + member.bias
-            error = prediction - target
-            
-            # Update weights
-            gradient = np.outer(features, error).mean(axis=1)
-            member.weights -= learning_rate * gradient
-            member.bias -= learning_rate * error.mean()
-            
-            # Update performance (exponential moving average)
-            member.performance = 0.9 * member.performance + 0.1 * (1.0 / (1.0 + np.abs(error).mean()))
-            member.last_updated = self.time_step
-            
-    def _sample_memory(self, batch_size: int) -> List[Dict]:
-        """Sample a batch of experiences from memory."""
-        return random.sample(self.memory, min(batch_size, len(self.memory)))
-
-    def _generate_base_response(self, user_input: str) -> str:
-        """
-        Generate a base response using the ensemble model.
-        In a real system, this would be replaced with a proper dialogue manager.
-        """
-        # Simple rule-based response generation as fallback
-        user_input = user_input.lower()
-        if 'hello' in user_input or 'hi ' in user_input:
-            return "Hello! How can I assist you today?"
-        elif 'help' in user_input:
-            return "I'm here to help. Could you tell me more about what you need?"
-        elif 'thank' in user_input:
-            return "You're welcome! Is there anything else I can help with?"
-        else:
-            return "I understand. Please tell me more about your request."
-    
     def _extract_emotion_features(self, text: str, context: Dict[str, Any]) -> np.ndarray:
         """
         Extract emotion features using transformer-based emotion recognition combined with
@@ -525,7 +315,11 @@ class SEDSCore:
             vad_scores = emotion_result.get('vad_scores', [0.5, 0.5, 0.5])
             
             # Get cultural context features
-            cultural_features = context.get('cultural_profile', np.zeros(self.cultural_model.dimensions))
+            cultural_features = np.zeros(len(CulturalDimension))
+            if isinstance(context.get('cultural_profile'), dict):
+                # Convert profile dictionary to feature vector
+                for i, dim in enumerate(CulturalDimension):
+                    cultural_features[i] = context['cultural_profile'].get(dim, 0.5)
             
             # Extract linguistic features (complementary to transformer features)
             tokens = text.split()
@@ -555,7 +349,11 @@ class SEDSCore:
         except Exception as e:
             # Fallback to basic features if emotion model fails
             logging.warning(f"Emotion feature extraction failed: {str(e)}")
-            cultural_features = context.get('cultural_profile', np.zeros(self.cultural_model.dimensions))
+            cultural_features = np.zeros(len(CulturalDimension))
+            if isinstance(context.get('cultural_profile'), dict):
+                for i, dim in enumerate(CulturalDimension):
+                    cultural_features[i] = context['cultural_profile'].get(dim, 0.5)
+                    
             return np.concatenate([
                 np.zeros(768 + 7 + 3),  # Zero vectors for missing transformer features
                 cultural_features,

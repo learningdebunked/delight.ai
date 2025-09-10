@@ -59,6 +59,13 @@ class EmotionConfig:
     max_length: int = 128
     model_type: EmotionModelType = EmotionModelType.ADVANCED
     
+    # Performance optimization settings
+    use_amp: bool = True  # Automatic Mixed Precision
+    use_gradient_checkpointing: bool = True
+    use_8bit_quantization: bool = torch.cuda.is_available()
+    use_torch_compile: bool = torch.__version__ >= '2.0.0'  # Requires PyTorch 2.0+
+    use_memory_efficient_attention: bool = True
+    
     # Emotion detection
     emotion_labels: List[str] = field(default_factory=lambda: list(EmotionType._value2member_map_.keys()))
     threshold: float = 0.2  # Minimum probability to consider an emotion present
@@ -202,27 +209,46 @@ class EmotionModel(nn.Module):
         logger.info(f"Initialized EmotionModel (type: {self.config.model_type}) on device: {self.device}")
         
     def _initialize_models(self):
-        """Initialize the emotion detection models based on configuration."""
+        """Initialize the emotion detection models with performance optimizations."""
         try:
             logger.info(f"Initializing emotion model: {self.config.model_type}")
             
             # Initialize tokenizer and base model
             self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_name)
             
+            # Enable gradient checkpointing if specified
+            if self.config.use_gradient_checkpointing:
+                from torch.utils.checkpoint import checkpoint_sequential
+                self.checkpoint_sequential = checkpoint_sequential
+                logger.info("Enabled gradient checkpointing")
+            
+            # Set up mixed precision training
+            self.scaler = torch.cuda.amp.GradScaler(enabled=self.config.use_amp)
+            self.amp_dtype = getattr(torch, self.config.amp_dtype) if hasattr(torch, self.config.amp_dtype) else torch.float16
+            
+            # Initialize model with appropriate configuration
             if self.config.model_type == EmotionModelType.ADVANCED:
-                # Advanced model with custom architecture
                 config = BertConfig.from_pretrained(
                     self.config.model_name,
                     num_labels=len(self.config.emotion_labels),
                     output_hidden_states=True,
                     output_attentions=True,
                     hidden_dropout_prob=0.2,
-                    attention_probs_dropout_prob=0.2
+                    attention_probs_dropout_prob=0.2,
+                    # Memory efficient attention
+                    attention_probs_dropout_prob=0.1 if self.config.use_memory_efficient_attention else 0.0,
+                    use_memory_efficient_attention=self.config.use_memory_efficient_attention
                 )
-                self.model = BertModel.from_pretrained(
-                    self.config.model_name,
-                    config=config
-                )
+                
+                # Load model with memory optimizations
+                with torch.device_scope(self.device):
+                    self.model = BertModel.from_pretrained(
+                        self.config.model_name,
+                        config=config,
+                        torch_dtype=self.amp_dtype if self.config.use_amp else torch.float32,
+                        low_cpu_mem_usage=True,
+                        device_map="auto" if torch.cuda.device_count() > 1 else None
+                    )
                 
                 # Add custom classification head
                 self.classifier = nn.Sequential(
@@ -232,32 +258,55 @@ class EmotionModel(nn.Module):
                     nn.LayerNorm(256),
                     nn.Dropout(0.2),
                     nn.Linear(256, len(self.config.emotion_labels))
-                )
+                ).to(self.device)
                 
                 # Initialize weights
                 self.classifier.apply(self._init_weights)
                 
+                # Apply gradient checkpointing if enabled
+                if self.config.use_gradient_checkpointing:
+                    self.model.gradient_checkpointing_enable()
+                    logger.info("Enabled gradient checkpointing for the model")
+                
             else:
-                # Standard pre-trained model
+                # Standard pre-trained model with optimizations
                 self.model = AutoModelForSequenceClassification.from_pretrained(
                     self.config.model_name,
-                    num_labels=len(self.config.emotion_labels)
+                    num_labels=len(self.config.emotion_labels),
+                    torch_dtype=self.amp_dtype if self.config.use_amp else torch.float32,
+                    low_cpu_mem_usage=True,
+                    device_map="auto" if torch.cuda.device_count() > 1 else None
                 )
             
-            # Move to device
-            self.model = self.model.to(self.device)
+            # Apply optimizations
+            self._apply_model_optimizations()
             
-            # Initialize uncertainty estimator
+            # Initialize uncertainty estimator with optimizations
             self.uncertainty_estimator = UncertaintyEstimator(
                 self.model,
-                num_passes=self.config.mc_dropout_passes
+                num_passes=self.config.mc_dropout_passes,
+                use_amp=self.config.use_amp
             )
             
-            # Initialize sentence encoder for contextual understanding
+            # Initialize sentence encoder with optimizations
             self.sentence_encoder = SentenceTransformer(
                 'sentence-transformers/all-MiniLM-L6-v2',
-                device=self.device
+                device=self.device,
+                device_map="auto" if torch.cuda.device_count() > 1 else None
             )
+            
+            # Compile model if supported and enabled
+            if self.config.use_torch_compile and hasattr(torch, 'compile'):
+                try:
+                    self.model = torch.compile(self.model)
+                    logger.info("Model compilation with torch.compile completed")
+                except Exception as e:
+                    logger.warning(f"Model compilation failed: {e}")
+            
+            # Log memory usage
+            if torch.cuda.is_available():
+                logger.info(f"GPU Memory allocated: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")
+                logger.info(f"GPU Memory reserved: {torch.cuda.memory_reserved() / 1024**2:.2f} MB")
             
             logger.info("Successfully initialized emotion models")
             
@@ -266,14 +315,120 @@ class EmotionModel(nn.Module):
             raise
     
     def _init_weights(self, module):
-        """Initialize weights for custom layers."""
+        """Initialize weights for custom layers with optimized initialization."""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=0.02)
+            # Kaiming initialization with fan_in mode for ReLU/GELU
+            nn.init.kaiming_normal_(module.weight, mode='fan_in', nonlinearity='gelu')
             if module.bias is not None:
-                module.bias.data.zero_()
+                nn.init.constant_(module.bias, 0.0)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            # Initialize LayerNorm with 1.0 for weight and 0.0 for bias
+            nn.init.constant_(module.weight, 1.0)
+            nn.init.constant_(module.bias, 0.0)
+        elif isinstance(module, nn.Embedding):
+            # Initialize embeddings with smaller scale for better training stability
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+    
+    def _apply_model_optimizations(self):
+        """Apply various model optimizations."""
+        # Move model to device with memory optimizations
+        self.model = self.model.to(self.device)
+        
+        # Apply 8-bit quantization if enabled and supported
+        if self.config.use_8bit_quantization and torch.cuda.is_available():
+            try:
+                import bitsandbytes as bnb
+                from bitsandbytes.nn import Linear8bitLt
+                
+                # Replace linear layers with 8-bit quantized versions
+                for name, module in self.model.named_children():
+                    if isinstance(module, nn.Linear):
+                        # Skip classification head from quantization
+                        if 'classifier' not in name and 'pooler' not in name:
+                            quantized_layer = Linear8bitLt(
+                                module.in_features,
+                                module.out_features,
+                                bias=module.bias is not None,
+                                has_fp16_weights=False
+                            )
+                            quantized_layer.weight = bnb.nn.Int8Params(
+                                module.weight.data,
+                                requires_grad=True
+                            )
+                            if module.bias is not None:
+                                quantized_layer.bias = nn.Parameter(module.bias.data.clone())
+                            setattr(self.model, name, quantized_layer)
+                logger.info("Applied 8-bit quantization to model weights")
+                
+            except ImportError:
+                logger.warning("bitsandbytes not available, skipping 8-bit quantization")
+        
+        # Apply gradient checkpointing if enabled
+        if self.config.use_gradient_checkpointing:
+            self.model.gradient_checkpointing_enable()
+            logger.info("Enabled gradient checkpointing")
+        
+        # Enable memory-efficient attention if available
+        if self.config.use_memory_efficient_attention and hasattr(torch.backends, 'xformers'):
+            try:
+                from xformers.ops import memory_efficient_attention
+                torch.backends.xformers.enable_mem_efficient_attention()
+                logger.info("Enabled memory-efficient attention")
+            except ImportError:
+                logger.warning("xformers not available, using standard attention")
+    
+    def _quantize_model(self):
+        """Apply dynamic quantization to the model."""
+        if not self.config.dynamic_quantization or not torch.cuda.is_available():
+            return
+            
+        logger.info("Applying dynamic quantization to the model")
+        try:
+            # Quantize the model with dynamic quantization
+            self.model = torch.quantization.quantize_dynamic(
+                self.model,
+                {torch.nn.Linear},  # Quantize only linear layers
+                dtype=torch.qint8
+            )
+            logger.info("Dynamic quantization applied successfully")
+        except Exception as e:
+            logger.error(f"Failed to apply dynamic quantization: {e}")
+    
+    def train_step(self, batch, optimizer):
+        """Perform a single training step with optimizations."""
+        self.model.train()
+        
+        # Move batch to device
+        batch = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v 
+                for k, v in batch.items()}
+        
+        # Forward pass with mixed precision
+        with torch.cuda.amp.autocast(enabled=self.config.use_amp, dtype=self.amp_dtype):
+            outputs = self.model(**batch)
+            loss = outputs.loss / self.config.gradient_accumulation_steps
+        
+        # Scale loss and backpropagate
+        self.scaler.scale(loss).backward()
+        
+        # Gradient accumulation
+        if (self.global_step + 1) % self.config.gradient_accumulation_steps == 0:
+            # Clip gradients
+            self.scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+            
+            # Optimizer step
+            self.scaler.step(optimizer)
+            self.scaler.update()
+            optimizer.zero_grad()
+            
+            # Update learning rate scheduler if available
+            if hasattr(self, 'scheduler'):
+                self.scheduler.step()
+        
+        self.global_step += 1
+        return loss.item()
             
     def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         """Forward pass through the model."""
@@ -369,34 +524,163 @@ class EmotionModel(nn.Module):
             padding='max_length',
             truncation=True
         ).to(self.device)
+    def _init_multimodal_models(self):
+        """Initialize models for multimodal emotion detection."""
+        from transformers import Wav2Vec2Processor, Wav2Vec2Model
+        from transformers import ViTFeatureExtractor, ViTModel
+        
+        # Initialize audio model (Wav2Vec 2.0)
+        self.audio_processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+        self.audio_model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h").to(self.device)
+        self.audio_model.eval()
+        
+        # Initialize visual model (ViT)
+        self.visual_processor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
+        self.visual_model = ViTModel.from_pretrained('google/vit-base-patch16-224').to(self.device)
+        self.visual_model.eval()
+        
+        # Cross-modal attention layers
+        self.cross_attention = nn.MultiheadAttention(embed_dim=768, num_heads=8, batch_first=True).to(self.device)
+        self.modality_weights = nn.Parameter(torch.ones(3) / 3)  # Equal weights for text, audio, visual
+        
+    def _process_audio(self, audio: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
+        """Process audio input and extract emotion-related features."""
+        if isinstance(audio, np.ndarray):
+            audio = torch.from_numpy(audio).float()
+            
+        if audio.dim() == 1:
+            audio = audio.unsqueeze(0)  # Add batch dimension
+            
+        # Process audio through Wav2Vec2
+        with torch.no_grad():
+            inputs = self.audio_processor(
+                audio.squeeze().numpy(), 
+                return_tensors="pt", 
+                sampling_rate=16000,
+                padding=True,
+                return_attention_mask=True
+            ).to(self.device)
+            
+            outputs = self.audio_model(**inputs)
+            # Use mean pooling over time dimension
+            audio_features = outputs.last_hidden_state.mean(dim=1)
+            
+        return audio_features
+    
+    def _process_visual(self, visual: Union[np.ndarray, torch.Tensor]) -> torch.Tensor:
+        """Process visual input and extract emotion-related features."""
+        if isinstance(visual, np.ndarray):
+            if visual.max() > 1.0:  # Assuming 0-255 range
+                visual = visual.astype(np.float32) / 255.0
+            visual = torch.from_numpy(visual).permute(2, 0, 1)  # HWC to CHW
+            
+        if visual.dim() == 3:
+            visual = visual.unsqueeze(0)  # Add batch dimension
+            
+        # Process visual through ViT
+        with torch.no_grad():
+            inputs = self.visual_processor(
+                images=visual,
+                return_tensors="pt"
+            )['pixel_values'].to(self.device)
+            
+            outputs = self.visual_model(pixel_values=inputs)
+            visual_features = outputs.last_hidden_state[:, 0]  # [CLS] token
+            
+        return visual_features
+    
+    def _fuse_modalities(self, text_features: torch.Tensor, 
+                        audio_features: Optional[torch.Tensor] = None,
+                        visual_features: Optional[torch.Tensor] = None) -> Dict[str, float]:
+        """Fuse features from different modalities using attention."""
+        # Project all features to same dimension if needed
+        text_features = text_features.unsqueeze(1)  # [batch, 1, dim]
+        
+        # Prepare modality features for attention
+        modality_features = [text_features]
+        if audio_features is not None:
+            audio_features = audio_features.unsqueeze(1)
+            modality_features.append(audio_features)
+        if visual_features is not None:
+            visual_features = visual_features.unsqueeze(1)
+            modality_features.append(visual_features)
+            
+        # Stack and apply attention
+        stacked_features = torch.cat(modality_features, dim=1)  # [batch, num_modalities, dim]
+        
+        # Cross-attention between modalities
+        attended, _ = self.cross_attention(
+            stacked_features,  # query
+            stacked_features,  # key
+            stacked_features,  # value
+            need_weights=False
+        )
+        
+        # Weighted sum of attended features
+        weights = torch.softmax(self.modality_weights[:len(modality_features)], dim=0)
+        fused_features = (attended * weights.view(1, -1, 1)).sum(dim=1)
+        
+        # Predict emotions from fused features
+        logits = self.classifier(fused_features)
+        probs = torch.softmax(logits, dim=-1)
+        
+        # Convert to emotion dictionary
+        emotions = {
+            label: probs[0, i].item() 
+            for i, label in enumerate(self.config.emotion_labels)
+        }
+        
+        return emotions
+    
     def _detect_multimodal_emotion(self, 
                                  text: Optional[str] = None,
                                  audio: Optional[Union[np.ndarray, torch.Tensor]] = None,
                                  visual: Optional[Union[np.ndarray, torch.Tensor]] = None) -> Dict[str, float]:
         """
-        Detect emotions from multimodal inputs.
-        This is a placeholder implementation that can be extended with specific models.
+        Detect emotions from multimodal inputs using transformer-based models.
+        
+        Implements a sophisticated multimodal fusion approach with:
+        1. Text processing using the base transformer
+        2. Audio processing with Wav2Vec2
+        3. Visual processing with Vision Transformer (ViT)
+        4. Cross-modal attention for feature fusion
+        
+        Args:
+            text: Input text for emotion analysis
+            audio: Raw audio waveform (numpy array or torch.Tensor)
+            visual: Input image (numpy array or torch.Tensor)
+            
+        Returns:
+            Dictionary mapping emotion labels to probabilities
         """
-        # This would be implemented based on the specific multimodal model being used
-        # For example, using Wav2Vec2 for audio and ViT for images
+        if not hasattr(self, 'audio_model'):
+            self._init_multimodal_models()
         
-        # Placeholder implementation
-        emotions = {}
-        
+        # Process text if available
+        text_features = None
         if text:
-            text_emotions = self._detect_text_emotion(text)
-            emotions.update(text_emotions)
-            
-        # Add audio and visual processing here
-        # For example:
-        # if audio is not None:
-        #     audio_emotions = self._process_audio(audio)
-        #     emotions = self._fuse_emotions(emotions, audio_emotions)
-        # 
-        # if visual is not None:
-        #     visual_emotions = self._process_visual(visual)
-        #     emotions = self._fuse_emotions(emotions, visual_emotions)
-            
+            inputs = self._prepare_text_inputs(text)
+            with torch.no_grad():
+                outputs = self.model(**inputs, output_hidden_states=True)
+                text_features = outputs.hidden_states[-1][:, 0]  # [CLS] token
+        
+        # Process audio if available
+        audio_features = None
+        if audio is not None:
+            audio_features = self._process_audio(audio)
+        
+        # Process visual if available
+        visual_features = None
+        if visual is not None:
+            visual_features = self._process_visual(visual)
+        
+        # Fuse modalities and predict emotions
+        emotions = self._fuse_modalities(
+            text_features=text_features if text_features is not None else torch.zeros(1, 768).to(self.device),
+            audio_features=audio_features,
+            visual_features=visual_features
+        )
+        
         return emotions
     
     def update_emotion_state(self, 
