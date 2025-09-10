@@ -1,17 +1,35 @@
+"""
+Enhanced Emotion Model for SEDS Framework
+
+Implements a state-of-the-art emotion detection system with:
+- Transformer-based emotion classification
+- Temporal modeling of emotion states
+- Uncertainty quantification
+- Multimodal fusion capabilities
+"""
+
 import numpy as np
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional, Union, Any
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.nn.utils.rnn import pad_sequence
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     AutoProcessor,
-    pipeline
+    AutoModel,
+    BertModel,
+    BertConfig,
+    get_linear_schedule_with_warmup
 )
 from sentence_transformers import SentenceTransformer
-import torch.nn.functional as F
-from dataclasses import dataclass
-from enum import Enum
+from dataclasses import dataclass, field
+from enum import Enum, auto
 import logging
+import math
+from scipy.stats import entropy
+from collections import deque, defaultdict
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -20,139 +38,337 @@ logger = logging.getLogger(__name__)
 class EmotionModelType(str, Enum):
     TEXT = "text"
     MULTIMODAL = "multimodal"
+    ADVANCED = "advanced"  # New model type with temporal modeling
+
+class EmotionType(str, Enum):
+    JOY = "joy"
+    SADNESS = "sadness"
+    ANGER = "anger"
+    FEAR = "fear"
+    SURPRISE = "surprise"
+    DISGUST = "disgust"
+    TRUST = "trust"
+    ANTICIPATION = "anticipation"
+    NEUTRAL = "neutral"
 
 @dataclass
 class EmotionConfig:
-    model_name: str = "SamLowe/roberta-base-go_emotions"
+    # Model configuration
+    model_name: str = "bert-base-uncased"
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
-    max_length: int = 512
-    threshold: float = 0.1
-    top_k: int = 5
-    model_type: EmotionModelType = EmotionModelType.TEXT
+    max_length: int = 128
+    model_type: EmotionModelType = EmotionModelType.ADVANCED
+    
+    # Emotion detection
+    emotion_labels: List[str] = field(default_factory=lambda: list(EmotionType._value2member_map_.keys()))
+    threshold: float = 0.2  # Minimum probability to consider an emotion present
+    top_k: int = 3  # Number of top emotions to return
+    
+    # Temporal modeling
+    history_window: int = 10  # Number of past states to consider
+    decay_factor: float = 0.9  # Decay rate for past emotions
+    
+    # Uncertainty estimation
+    mc_dropout_passes: int = 5  # Number of forward passes for MC Dropout
+    uncertainty_threshold: float = 0.3  # Threshold for high uncertainty
+    
+    # Training parameters (if fine-tuning)
+    learning_rate: float = 2e-5
+    weight_decay: float = 0.01
+    warmup_steps: int = 100
 
-class EmotionModel:
+class EmotionState:
+    """Class to manage the temporal state of emotions."""
+    
+    def __init__(self, num_emotions: int, window_size: int = 10, decay: float = 0.9):
+        self.num_emotions = num_emotions
+        self.window_size = window_size
+        self.decay = decay
+        self.history = deque(maxlen=window_size)
+        self.current_state = np.zeros(num_emotions)
+        self.uncertainty = 1.0  # Initial high uncertainty
+        
+    def update(self, emotion_probs: np.ndarray, uncertainty: float) -> None:
+        """Update the emotion state with new observations."""
+        # Apply decay to current state
+        self.current_state *= self.decay
+        
+        # Add new observation with uncertainty weighting
+        confidence = 1.0 - min(uncertainty, 1.0)
+        self.current_state = self.current_state * (1 - confidence) + emotion_probs * confidence
+        
+        # Normalize to maintain probability distribution
+        self.current_state = self.current_state / (self.current_state.sum() + 1e-8)
+        
+        # Update history
+        self.history.append(self.current_state.copy())
+        self.uncertainty = uncertainty
+    
+    def get_dominant_emotion(self) -> Tuple[str, float]:
+        """Get the current dominant emotion and its intensity."""
+        idx = np.argmax(self.current_state)
+        return self.config.emotion_labels[idx], float(self.current_state[idx])
+    
+    def get_emotion_trend(self, window: int = 5) -> Dict[str, float]:
+        """Calculate the trend of each emotion over the recent window."""
+        if len(self.history) < 2:
+            return {e: 0.0 for e in self.config.emotion_labels}
+            
+        recent = np.array(list(self.history)[-window:])
+        if len(recent) < 2:
+            return {self.config.emotion_labels[i]: 0.0 
+                   for i in range(self.num_emotions)}
+            
+        # Calculate slope using linear regression
+        x = np.arange(len(recent))
+        trends = []
+        for i in range(self.num_emotions):
+            if np.all(recent[:, i] == recent[0, i]):
+                trends.append(0.0)
+                continue
+            z = np.polyfit(x, recent[:, i], 1)
+            trends.append(z[0])
+            
+        return {self.config.emotion_labels[i]: float(trends[i]) 
+               for i in range(self.num_emotions)}
+
+
+class UncertaintyEstimator:
+    """Handles uncertainty estimation using MC Dropout and ensemble methods."""
+    
+    def __init__(self, model: nn.Module, num_passes: int = 5):
+        self.model = model
+        self.num_passes = num_passes
+        
+    def estimate(self, inputs: Dict[str, torch.Tensor]) -> Tuple[np.ndarray, float]:
+        """Estimate uncertainty using MC Dropout."""
+        self.model.eval()
+        self.model.enable_dropout()
+        
+        # Get multiple predictions
+        with torch.no_grad():
+            outputs = [self.model(**inputs).logits.softmax(dim=-1) 
+                      for _ in range(self.num_passes)]
+            
+        # Stack predictions and compute statistics
+        predictions = torch.stack(outputs)
+        mean_pred = predictions.mean(dim=0)
+        std_pred = predictions.std(dim=0)
+        
+        # Compute uncertainty as average standard deviation
+        uncertainty = std_pred.mean().item()
+        
+        return mean_pred.cpu().numpy(), uncertainty
+
+
+class EmotionModel(nn.Module):
     """
-    Enhanced emotion detection and modeling component of the SEDS framework.
-    Supports multiple emotion models and multimodal inputs.
+    Advanced Emotion Detection and Modeling System
+    
+    Features:
+    - Transformer-based emotion classification
+    - Temporal modeling of emotion states
+    - Uncertainty quantification
+    - Multimodal fusion capabilities
     """
     
     def __init__(self, config: Optional[EmotionConfig] = None):
         """
-        Initialize the enhanced emotion model.
+        Initialize the advanced emotion model.
         
         Args:
             config: Configuration for the emotion model
         """
+        super().__init__()
         self.config = config or EmotionConfig()
-        self.device = self.config.device
+        self.device = torch.device(self.config.device)
         
-        # Initialize models
+        # Initialize models and components
         self.tokenizer = None
         self.model = None
-        self.processor = None
+        self.uncertainty_estimator = None
         self.sentence_encoder = None
         
+        # Initialize emotion state
+        self.emotion_state = EmotionState(
+            num_emotions=len(self.config.emotion_labels),
+            window_size=self.config.history_window,
+            decay=self.config.decay_factor
+        )
+        
+        # Initialize models
         self._initialize_models()
         
-        # Initialize emotion state
-        self.emotion_state = np.zeros(self.config.dimensions)
-        self.emotion_history = []
-        
-        logger.info(f"Initialized EmotionModel on device: {self.device}")
+        logger.info(f"Initialized EmotionModel (type: {self.config.model_type}) on device: {self.device}")
         
     def _initialize_models(self):
         """Initialize the emotion detection models based on configuration."""
         try:
-            logger.info(f"Loading emotion model: {self.config.model_name}")
+            logger.info(f"Initializing emotion model: {self.config.model_type}")
             
-            if self.config.model_type == EmotionModelType.TEXT:
-                # Initialize text-based emotion model
-                self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_name)
-                self.model = AutoModelForSequenceClassification.from_pretrained(
-                    self.config.model_name
-                ).to(self.device)
-                self.model.eval()
+            # Initialize tokenizer and base model
+            self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_name)
+            
+            if self.config.model_type == EmotionModelType.ADVANCED:
+                # Advanced model with custom architecture
+                config = BertConfig.from_pretrained(
+                    self.config.model_name,
+                    num_labels=len(self.config.emotion_labels),
+                    output_hidden_states=True,
+                    output_attentions=True,
+                    hidden_dropout_prob=0.2,
+                    attention_probs_dropout_prob=0.2
+                )
+                self.model = BertModel.from_pretrained(
+                    self.config.model_name,
+                    config=config
+                )
                 
-            elif self.config.model_type == EmotionModelType.MULTIMODAL:
-                # Initialize multimodal model (e.g., for text + audio/visual)
-                self.processor = AutoProcessor.from_pretrained(self.config.model_name)
+                # Add custom classification head
+                self.classifier = nn.Sequential(
+                    nn.Dropout(0.2),
+                    nn.Linear(config.hidden_size, 256),
+                    nn.GELU(),
+                    nn.LayerNorm(256),
+                    nn.Dropout(0.2),
+                    nn.Linear(256, len(self.config.emotion_labels))
+                )
+                
+                # Initialize weights
+                self.classifier.apply(self._init_weights)
+                
+            else:
+                # Standard pre-trained model
                 self.model = AutoModelForSequenceClassification.from_pretrained(
-                    self.config.model_name
-                ).to(self.device)
-                self.model.eval()
+                    self.config.model_name,
+                    num_labels=len(self.config.emotion_labels)
+                )
             
-            # Initialize sentence encoder for emotion state
+            # Move to device
+            self.model = self.model.to(self.device)
+            
+            # Initialize uncertainty estimator
+            self.uncertainty_estimator = UncertaintyEstimator(
+                self.model,
+                num_passes=self.config.mc_dropout_passes
+            )
+            
+            # Initialize sentence encoder for contextual understanding
             self.sentence_encoder = SentenceTransformer(
                 'sentence-transformers/all-MiniLM-L6-v2',
                 device=self.device
             )
             
-            logger.info("Successfully loaded emotion models")
+            logger.info("Successfully initialized emotion models")
             
         except Exception as e:
             logger.error(f"Failed to initialize emotion models: {e}")
             raise
+    
+    def _init_weights(self, module):
+        """Initialize weights for custom layers."""
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
             
-    def detect_emotion(self, 
-                      text: Optional[str] = None,
-                      audio: Optional[Union[np.ndarray, torch.Tensor]] = None,
-                      visual: Optional[Union[np.ndarray, torch.Tensor]] = None) -> Dict[str, float]:
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the model."""
+        if self.config.model_type == EmotionModelType.ADVANCED:
+            outputs = self.model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_hidden_states=True
+            )
+            # Use [CLS] token representation
+            sequence_output = outputs.last_hidden_state[:, 0, :]
+            logits = self.classifier(sequence_output)
+            return logits
+        else:
+            outputs = self.model(
+                input_ids=input_ids,
+                attention_mask=attention_mask
+            )
+            return outputs.logits
+    
+    def detect_emotion(
+        self, 
+        text: Optional[str] = None,
+        audio: Optional[Union[np.ndarray, torch.Tensor]] = None,
+        visual: Optional[Union[np.ndarray, torch.Tensor]] = None,
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
-        Detect emotions from text, audio, or visual inputs.
+        Detect emotions with uncertainty estimation and temporal modeling.
         
         Args:
-            text: Input text to analyze
-            audio: Audio signal (for multimodal models)
-            visual: Visual input (for multimodal models)
+            text: Input text for emotion analysis
+            audio: Optional audio features for multimodal analysis
+            visual: Optional visual features for multimodal analysis
+            context: Additional context for emotion analysis
             
         Returns:
-            Dictionary of emotion scores
+            Dictionary containing:
+            - emotions: Dict of emotion probabilities
+            - dominant_emotion: Tuple of (emotion, probability)
+            - uncertainty: Uncertainty score (0-1)
+            - trend: Trend of each emotion over time
+            - state: Current emotion state vector
         """
         if text is None and audio is None and visual is None:
-            raise ValueError("At least one input modality (text, audio, or visual) must be provided")
-            
-        try:
-            if self.config.model_type == EmotionModelType.TEXT and text:
-                return self._detect_text_emotion(text)
-                
-            elif self.config.model_type == EmotionModelType.MULTIMODAL:
-                return self._detect_multimodal_emotion(text, audio, visual)
-                
+            raise ValueError("At least one input modality must be provided")
+        
+        # Process input based on available modalities
+        if text is not None:
+            inputs = self._prepare_text_inputs(text)
+        else:
+            inputs = self._prepare_multimodal_inputs(audio, visual)
+        
+        # Get model predictions with uncertainty estimation
+        with torch.no_grad():
+            if self.config.model_type == EmotionModelType.ADVANCED:
+                # Use MC Dropout for uncertainty estimation
+                emotion_probs, uncertainty = self.uncertainty_estimator.estimate(inputs)
             else:
-                raise ValueError(f"Unsupported model type: {self.config.model_type}")
-                
-        except Exception as e:
-            logger.error(f"Error in emotion detection: {e}", exc_info=True)
-            return {}
+                # Standard forward pass
+                outputs = self.model(**inputs)
+                emotion_probs = F.softmax(outputs.logits, dim=-1).cpu().numpy()
+                uncertainty = 0.0  # No uncertainty estimation for standard models
+        
+        # Convert to dictionary format
+        emotion_dict = {
+            self.config.emotion_labels[i]: float(emotion_probs[0][i]) 
+            for i in range(len(self.config.emotion_labels))
+        }
+        
+        # Update emotion state
+        self.emotion_state.update(emotion_probs[0], uncertainty)
+        
+        # Get dominant emotion and trends
+        dominant_emotion, confidence = self.emotion_state.get_dominant_emotion()
+        trends = self.emotion_state.get_emotion_trend()
+        
+        return {
+            'emotions': emotion_dict,
+            'dominant_emotion': (dominant_emotion, confidence),
+            'uncertainty': float(uncertainty),
+            'trend': trends,
+            'state': self.emotion_state.current_state.tolist(),
+            'high_uncertainty': uncertainty > self.config.uncertainty_threshold
+        }
     
-    def _detect_text_emotion(self, text: str) -> Dict[str, float]:
-        """Detect emotions from text input."""
-        inputs = self.tokenizer(
+    def _prepare_text_inputs(self, text: str) -> Dict[str, torch.Tensor]:
+        """Prepare text inputs for the model."""
+        return self.tokenizer(
             text,
             return_tensors="pt",
             max_length=self.config.max_length,
-            truncation=True,
-            padding=True
+            padding='max_length',
+            truncation=True
         ).to(self.device)
-        
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-            
-        # Get emotion probabilities
-        probs = F.softmax(outputs.logits, dim=-1)[0]
-        
-        # Get top-k emotions
-        top_probs, top_indices = torch.topk(probs, k=self.config.top_k)
-        
-        # Map to emotion labels
-        emotions = {}
-        for idx, prob in zip(top_indices, top_probs):
-            if prob >= self.config.threshold:
-                label = self.model.config.id2label[idx.item()]
-                emotions[label] = prob.item()
-                
-        return emotions
-        
     def _detect_multimodal_emotion(self, 
                                  text: Optional[str] = None,
                                  audio: Optional[Union[np.ndarray, torch.Tensor]] = None,
