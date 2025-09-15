@@ -1,36 +1,89 @@
 # 🌐 Delight.AI - Service Excellence Dynamical System (SEDS)
 
-**SEDS** (Service Excellence Dynamical System) is an advanced AI framework that powers **Delight.AI**, delivering next-generation, emotionally-intelligent customer experiences. This comprehensive system enables the creation of cross-cultural, emotionally-aware service systems that understand and adapt to cultural differences, recognize and respond to emotions in real-time, and continuously improve through feedback and machine learning.
+**SEDS** (Service Excellence Dynamical System) is a Python framework for building culturally-aware and emotionally-intelligent AI service systems. It provides tools for analyzing and adapting to cultural contexts, processing multi-modal inputs, and optimizing service interactions.
 
-> **Enterprise-Grade AI for Customer Experience** - SEDS combines cutting-edge machine learning with deep cultural intelligence to transform customer interactions across all digital touchpoints.
+> **Research-Grade Framework** - SEDS implements novel algorithms for cultural adaptation and emotion modeling, backed by mathematical foundations and empirical validation.
 
-## ✨ Key Innovations
+## ✨ Core Features
 
-- **Multi-modal Intelligence**: Process and fuse text, audio, and visual inputs for comprehensive understanding
-- **Cultural Adaptation**: Advanced modeling across 25+ cultural dimensions for global deployment
-- **Real-time Emotion Analysis**: State-of-the-art emotion detection and response adaptation
-- **Theoretical Foundations**: Built on three core theorems ensuring optimal service delivery
-- **High Performance**: Optimized for both training and inference with GPU acceleration
-- **Enterprise Ready**: Production-grade monitoring, logging, and scalability
+- **Cultural Adaptation Engine**: Implements Hofstede's cultural dimensions with empirical validation
+- **Multi-modal Processing**: Unified interface for text, audio, and visual inputs
+- **Emotion Recognition**: Real-time emotion analysis with uncertainty estimation
+- **Theoretical Foundations**: Implements three core theorems for service adaptation
+- **Performance Tracking**: Built-in metrics and monitoring for service quality
+- **Modular Design**: Easy integration with existing ML pipelines
 
-## 🌟 Features
+## 📊 Getting Started
 
-### Core Innovations
-- **Stochastic Ensemble Dynamics**: Advanced ensemble modeling for robust predictions with formal convergence guarantees
-- **Multi-modal Fusion**: Seamless integration of text, audio, and visual inputs with cross-modal attention
-- **Performance Optimization**: Optimized for both training and inference with GPU acceleration and mixed precision
-- **Theoretical Foundations**: Implementation of three core theorems for service excellence with formal proofs
-- **Cultural Intelligence Engine**: Advanced cultural adaptation with real-time learning and expert validation
+### Installation
 
-### Enhanced Cultural Adaptation
-- **Multi-dimensional Cultural Modeling**: 25+ cultural dimensions including Hofstede's, Hall's, and Schwartz's models
-- **Dynamic Adaptation Strategies**: Context-aware adaptation with multiple strategies (assimilation, integration, separation, marginalization, hybridization)
-- **Expert Validation System**: Framework for domain experts to validate and refine cultural profiles
-- **Cultural Distance Metrics**: Advanced metrics for precise cultural difference quantification
-- **Adaptive Learning**: Continuous improvement from feedback and interactions
-- **Formal Theorems**: Mathematically-proven convergence and stability of adaptation processes
-- **Convergence Guarantees**: Formal proofs of convergence for all adaptation strategies
-- **Stress Testing**: Comprehensive test suite for edge cases and failure modes
+```bash
+# Clone the repository
+git clone https://github.com/learningdebunked/delight.ai.git
+cd delight.ai
+
+# Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### Basic Usage
+
+```python
+from models.seds_core import SEDSCore
+
+# Initialize the system
+seds = SEDSCore(
+    cultural_dimensions=10,
+    emotion_dimensions=8,
+    ensemble_size=5
+)
+
+# Process a user interaction
+response, metadata = seds.process_interaction(
+    user_input="The product I received is damaged. This is unacceptable!",
+    user_context={
+        'region': 'North America',
+        'interaction_history': [],
+        'cultural_profile': {
+            'power_distance': 0.3,
+            'individualism': 0.9,
+            # ... other cultural dimensions
+        }
+    }
+)
+
+print(f"Response: {response}")
+```
+
+## 🧩 Core Components
+
+### 1. Cultural Adaptation Engine
+Located in `models/cultural_model.py` and `models/enhanced_cultural_model.py`
+- Implements Hofstede's cultural dimensions with empirical validation
+- Supports dynamic adaptation to different cultural contexts
+- Includes validation and testing utilities
+
+### 2. Emotion Recognition
+Located in `models/emotion_model.py`
+- Real-time emotion analysis
+- Multi-modal emotion recognition (text, audio, visual)
+- Uncertainty estimation for predictions
+
+### 3. Multi-modal Processing
+Located in `models/multimodal_processor.py`
+- Unified interface for different input modalities
+- Feature extraction and fusion
+- Support for custom processing pipelines
+
+### 4. Performance Tracking
+Located in `models/performance_tracker.py`
+- Real-time metrics collection
+- Performance visualization
+- Alerting for service degradation
 
 ### Emotion Intelligence
 - **Advanced Multimodal Analysis**: State-of-the-art text, audio, and visual emotion detection
@@ -835,47 +888,8 @@ adaptation:
   fallback_strategy: "neutral"
 ```
 
-## 🚀 Getting Started with Development
+becomes
 
-### Prerequisites
-- Python 3.8+
-- pip 20.0+
-- Git
-- (Optional) Docker for containerized deployment
-
-### Development Setup
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/seds-framework.git
-   cd seds-framework
-   ```
-
-2. Set up a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: .\venv\Scripts\activate
-   ```
-
-3. Install development dependencies:
-   ```bash
-   pip install -r requirements-dev.txt
-   pre-commit install
-   ```
-
-4. Run the test suite:
-   ```bash
-   pytest tests/
-   ```
-
-## 🎮 Real-world Simulation Examples
-
-### 1. Smart Queue Management System
-
-Delight.AI transforms traditional queue management with emotional intelligence and predictive analytics:
-
-#### Core Features:
-- **Real-time Mood Tracking**: 
   ```python
   # Tracks customer mood states
   class CustomerMood(Enum):
