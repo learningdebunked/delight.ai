@@ -1,0 +1,68 @@
+{
+  "test_cases": [
+    {
+      "scenario": "High-value customer complaint in high power distance culture",
+      "region": "East Asia",
+      "response": "We sincerely apologize for the inconvenience, and we deeply value your esteemed feedback. Your family/team will appreciate that this product has excellent features that will make your life easier and more enjoyable.",
+      "cultural_alignment": 1.0,
+      "response_quality": 0.85,
+      "business_impact": 0.8
+    },
+    {
+      "scenario": "Individualistic customer seeking personal electronics",
+      "region": "North America",
+      "response": "We're sorry about that! You'll be glad to know this product has excellent features that will make your life easier and more enjoyable.",
+      "cultural_alignment": 1.0,
+      "response_quality": 0.85,
+      "business_impact": 0.6
+    },
+    {
+      "scenario": "Family-oriented purchase in collectivist culture",
+      "region": "Latin America",
+      "response": "We're sorry about that! Your family/team will appreciate that this product has excellent features that will make your life easier and more enjoyable.",
+      "cultural_alignment": 1.0,
+      "response_quality": 0.85,
+      "business_impact": 0.6
+    },
+    {
+      "scenario": "Return request in high uncertainty avoidance culture",
+      "region": "Germany",
+      "response": "We're sorry about that! Your family/team will appreciate that this product has excellent features that will help you achieve outstanding results.",
+      "cultural_alignment": 1.0,
+      "response_quality": 0.85,
+      "business_impact": 0.8
+    }
+  ],
+  "metrics": {
+    "cultural_alignment": 1.0,
+    "response_quality": 0.85,
+    "business_impact": 0.7
+  },
+  "expected_improvements": {
+    "customer_satisfaction": {
+      "baseline": 0.65,
+      "target": 0.85,
+      "metric": "CSAT Score (1-5 scale)"
+    },
+    "response_appropriateness": {
+      "baseline": 0.6,
+      "target": 0.88,
+      "metric": "% of culturally appropriate responses"
+    },
+    "issue_resolution_rate": {
+      "baseline": 0.7,
+      "target": 0.92,
+      "metric": "First Contact Resolution Rate"
+    },
+    "upsell_success": {
+      "baseline": 0.15,
+      "target": 0.35,
+      "metric": "% of successful upsells"
+    },
+    "return_rate": {
+      "baseline": 0.12,
+      "target": 0.08,
+      "metric": "Product return rate"
+    }
+  }
+}
